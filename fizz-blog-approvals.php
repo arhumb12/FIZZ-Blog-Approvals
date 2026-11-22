@@ -2,22 +2,20 @@
 /**
  * Plugin Name: FIZZ Blog Approvals
  * Description: Emails the client when a blog is published (immediately or scheduled), lets them approve or request changes with no login, and notifies your team.
- * Version: 1.2.0
+ * Version: 1.2.1
  * Author: FIZZ designs
  * Author URI: https://fizzdesigns.co.uk/
  * Plugin URI: https://fizzdesigns.co.uk/
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-// Auto-updates from GitHub releases.
+// Auto-updates: reads update.json from the repo (no GitHub API, so no rate limits).
 require_once __DIR__ . '/plugin-update-checker/plugin-update-checker.php';
 $ban_updater = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-	'https://github.com/arhumb12/FIZZ-Blog-Approvals/',
+	'https://raw.githubusercontent.com/arhumb12/FIZZ-Blog-Approvals/main/update.json',
 	__FILE__,
 	'fizz-blog-approvals'
 );
-$ban_updater->setBranch( 'main' );
-$ban_updater->getVcsApi()->enableReleaseAssets();
 
 class BAN_Plugin {
 	const OPT = 'ban_settings';
