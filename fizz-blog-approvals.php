@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FIZZ Blog Approvals
  * Description: Emails the client when a blog is published (immediately or scheduled), lets them approve or request changes with no login, and notifies your team.
- * Version: 1.3.1
+ * Version: 1.3.2
  * Author: FIZZ designs
  * Author URI: https://fizzdesigns.co.uk/
  * Plugin URI: https://fizzdesigns.co.uk/
@@ -102,7 +102,12 @@ class BAN_Plugin {
 	static function send( $to, $subject, $html, $reply = '' ) {
 		$h = [ 'Content-Type: text/html; charset=UTF-8' ];
 		if ( $reply ) $h[] = 'Reply-To: ' . $reply;
-		return wp_mail( $to, $subject, $html, $h );
+		// Show the website's name as the sender instead of "WordPress" (only for our emails).
+		$name_cb = function () { return wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ); };
+		add_filter( 'wp_mail_from_name', $name_cb, 99 );
+		$ok = wp_mail( $to, $subject, $html, $h );
+		remove_filter( 'wp_mail_from_name', $name_cb, 99 );
+		return $ok;
 	}
 
 	static function fb_html( $t ) {
