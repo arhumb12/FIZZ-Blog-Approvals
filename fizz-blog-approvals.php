@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FIZZ Blog Approvals
  * Description: Emails the client when a blog is published (immediately or scheduled), lets them approve or request changes with no login, and notifies your team.
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: FIZZ designs
  * Author URI: https://fizzdesigns.co.uk/
  * Plugin URI: https://fizzdesigns.co.uk/
@@ -242,8 +242,15 @@ class BAN_Plugin {
 		.ban-row:not(.h):hover{background:#fafbff}
 		.ban-title{font-weight:600;font-size:14px;text-decoration:none}.ban-sub{color:#6b7280;font-size:12px;margin-top:2px}
 		.ban-pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
-		.ban-fb summary{cursor:pointer;color:#374151;list-style:none}.ban-fb summary::-webkit-details-marker{display:none}
-		.ban-fb[open] summary{display:none}.ban-fb .full{background:#f9fafb;border-left:3px solid <?php echo $c; ?>;padding:8px 12px;border-radius:0 8px 8px 0}
+		.ban-modal{border:0;border-radius:14px;padding:0;width:min(640px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+		.ban-modal::backdrop{background:rgba(17,24,39,.55)}
+		.ban-mh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:18px 22px;border-bottom:1px solid #eee;background:#f9fafb}
+		.ban-x{background:none;border:0;font-size:26px;line-height:1;cursor:pointer;color:#6b7280}
+		.ban-mb{padding:6px 22px 4px;max-height:60vh;overflow:auto}.ban-entry{padding:12px 0;border-bottom:1px solid #f1f1f4}.ban-entry:last-child{border:0}
+		.ban-modal .full{background:#f9fafb;border-left:3px solid <?php echo $c; ?>;padding:10px 14px;border-radius:0 8px 8px 0;margin-top:6px;line-height:1.55}
+		.ban-modal .full ul,.ban-modal .full ol{padding-left:22px}
+		.ban-mf{padding:14px 22px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end}
+		.ban-btn2{background:<?php echo $c; ?>;color:#fff;text-decoration:none;padding:8px 16px;border-radius:8px;font-weight:600}.ban-btn2.alt{background:#fff;color:#111;border:1px solid #d1d5db}.ban-btn2:hover{opacity:.9;color:#fff}.ban-btn2.alt:hover{color:#111}
 		.ban-act a{display:inline-block;margin:0 8px 4px 0;text-decoration:none;font-weight:600}
 		.ban-empty{padding:48px 20px;text-align:center;color:#6b7280}
 		.ban-pg{padding:14px 20px;border-top:1px solid #f1f1f4}.ban-pg .page-numbers{padding:5px 10px;border-radius:6px;text-decoration:none}.ban-pg .current{background:<?php echo $c; ?>;color:#fff}
@@ -280,19 +287,41 @@ class BAN_Plugin {
 						<div><a class="ban-title" href="<?php echo esc_url( get_edit_post_link( $p->ID ) ); ?>"><?php echo esc_html( get_the_title( $p ) ); ?></a></div>
 						<div><?php echo esc_html( human_time_diff( $sent ) ); ?> ago<div class="ban-sub"><?php echo esc_html( wp_date( 'j M Y, H:i', $sent ) ); ?></div></div>
 						<div><span class="ban-pill" style="color:<?php echo $fg; ?>;background:<?php echo $bg; ?>"><?php echo $lab; ?></span><?php if ( $last ) echo '<div class="ban-sub">' . esc_html( wp_date( 'j M, H:i', $last['time'] ) ) . '</div>'; ?></div>
-						<div><?php if ( $fb ) : ?>
-							<details class="ban-fb"><summary><?php echo esc_html( wp_trim_words( wp_strip_all_tags( $fb ), 16 ) ); ?> <span style="color:<?php echo $c; ?>">Read more</span></summary><div class="full"><?php echo self::fb_html( $fb ); ?></div></details>
-						<?php else : echo '<span class="ban-sub">—</span>'; endif; ?></div>
+						<div><?php if ( $fb ) :
+							$short = wp_trim_words( wp_strip_all_tags( $fb ), 16 );
+							$more  = $short !== trim( wp_strip_all_tags( $fb ) ) || preg_match( '/<(ul|ol|blockquote|h2|h3|br|a)\b/i', $fb ) || count( $log ) > 1;
+							echo esc_html( $short );
+							if ( $more ) echo ' <a href="#" class="ban-more" data-ban="ban-m-' . (int) $p->ID . '" style="color:' . $c . ';font-weight:600">Read more</a>';
+						else : echo '<span class="ban-sub">—</span>'; endif; ?></div>
 						<div class="ban-act">
 							<a href="<?php echo esc_url( get_permalink( $p ) ); ?>" target="_blank" rel="noopener">View</a>
 							<a href="<?php echo esc_url( get_edit_post_link( $p->ID ) ); ?>">Edit</a>
 							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_resend&post=' . $p->ID . '&back=ban' ), 'ban_resend' ) ); ?>">Resend</a>
 						</div>
 					</div>
+					<?php if ( $fb ) : ?>
+					<dialog class="ban-modal" id="ban-m-<?php echo (int) $p->ID; ?>">
+						<div class="ban-mh"><div><strong><?php echo esc_html( get_the_title( $p ) ); ?></strong><div class="ban-sub"><span class="ban-pill" style="color:<?php echo $fg; ?>;background:<?php echo $bg; ?>"><?php echo $lab; ?></span></div></div><button type="button" class="ban-x" aria-label="Close">&times;</button></div>
+						<div class="ban-mb">
+							<?php foreach ( array_reverse( $log ) as $l ) : if ( $l['status'] !== 'changes' ) { echo '<div class="ban-entry"><div class="ban-sub">' . esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ) . '</div><p>✅ Approved</p></div>'; continue; } ?>
+								<div class="ban-entry"><div class="ban-sub"><?php echo esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ); ?> · Changes requested</div><div class="full"><?php echo self::fb_html( $l['feedback'] ); ?></div></div>
+							<?php endforeach; ?>
+						</div>
+						<div class="ban-mf"><a class="ban-btn2" href="<?php echo esc_url( get_edit_post_link( $p->ID ) ); ?>">Edit post</a> <a class="ban-btn2 alt" href="<?php echo esc_url( get_permalink( $p ) ); ?>" target="_blank" rel="noopener">View blog</a></div>
+					</dialog>
+					<?php endif; ?>
 				<?php endforeach; ?>
 				<?php if ( $total_rows > $per ) echo '<div class="ban-pg">' . paginate_links( [ 'base' => add_query_arg( 'paged', '%#%', add_query_arg( 'status', $filter, $base ) ), 'format' => '', 'current' => $paged, 'total' => (int) ceil( $total_rows / $per ) ] ) . '</div>'; ?>
 			</div>
 		</div>
+		<script>
+		document.addEventListener('click',function(e){
+			var t=e.target,o=t.closest&&t.closest('.ban-more');
+			if(o){e.preventDefault();var d=document.getElementById(o.dataset.ban);if(d&&d.showModal)d.showModal();return;}
+			if(t.classList&&t.classList.contains('ban-x')){t.closest('dialog').close();return;}
+			if(t.tagName==='DIALOG')t.close();
+		});
+		</script>
 		<?php
 	}
 
