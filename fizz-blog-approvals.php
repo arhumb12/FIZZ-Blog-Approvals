@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FIZZ Blog Approvals
  * Description: Emails the client when a blog is published (immediately or scheduled), lets them approve or request changes with no login, and notifies your team.
- * Version: 1.2.3
+ * Version: 1.2.4
  * Author: FIZZ designs
  * Author URI: https://fizzdesigns.co.uk/
  * Plugin URI: https://fizzdesigns.co.uk/
@@ -359,47 +359,70 @@ class BAN_Plugin {
 		return array_values( array_filter( $list, 'is_email' ) );
 	}
 
-	static function email_fields( $g, $label ) {
+	static function email_fields( $g, $label, $desc ) {
 		$extras = (array) self::opt( $g . '_extra', [] );
 		$n = self::OPT . '[' . $g;
-		echo '<tr><th>' . esc_html( $label ) . ' <span style="color:#d63638">*</span></th><td>'
-		. '<input type="email" class="regular-text" required name="' . $n . '_email]" value="' . esc_attr( self::opt( $g . '_email' ) ) . '" placeholder="Primary email (required)">'
-		. '<div class="ban-extra" data-name="' . $n . '_extra][]" style="margin-top:8px">';
+		echo '<div class="bs-card"><h2>' . esc_html( $label ) . '</h2><p class="bs-d">' . esc_html( $desc ) . '</p>'
+		. '<label class="bs-l">Primary email <span class="bs-req">required</span></label>'
+		. '<input type="email" required name="' . $n . '_email]" value="' . esc_attr( self::opt( $g . '_email' ) ) . '" placeholder="name@example.com">'
+		. '<label class="bs-l" style="margin-top:14px">Additional emails <span class="bs-opt">optional</span></label>'
+		. '<div class="bs-extra" data-name="' . $n . '_extra][]">';
 		foreach ( $extras as $e ) {
-			echo '<p class="ban-row"><input type="email" class="regular-text" name="' . $n . '_extra][]" value="' . esc_attr( $e ) . '"> <button type="button" class="button ban-del">Remove</button></p>';
+			echo '<div class="bs-erow"><input type="email" name="' . $n . '_extra][]" value="' . esc_attr( $e ) . '"><button type="button" class="bs-del" aria-label="Remove">&times;</button></div>';
 		}
-		echo '</div><button type="button" class="button ban-add" data-target="' . esc_attr( $g ) . '">+ Add another email (optional)</button></td></tr>';
+		echo '</div><button type="button" class="bs-add">+ Add another email</button></div>';
 	}
 
-	static function settings_page() { ?>
-		<div class="wrap"><h1>Blog Approval Settings</h1>
-		<?php settings_errors( 'ban' ); ?>
-		<form method="post" action="options.php"><?php settings_fields( 'ban' ); ?>
-		<table class="form-table">
-			<tr><th>Client name</th><td><input class="regular-text" name="<?php echo self::OPT; ?>[client_name]" value="<?php echo esc_attr( self::opt( 'client_name' ) ); ?>"></td></tr>
-			<?php self::email_fields( 'client', 'Client email(s)' ); ?>
-			<?php self::email_fields( 'team', 'Team email(s)' ); ?>
-		</table>
-		<h2>Branding</h2>
-		<p class="description">Shown in the plugin emails and on the review page. Leave blank to use the defaults.</p>
-		<table class="form-table">
-			<?php foreach ( [ 'brand_name' => 'Company name', 'brand_logo' => 'Logo URL', 'brand_color' => 'Brand colour (hex, e.g. #1a1a1a)', 'brand_url' => 'Website URL', 'brand_footer' => 'Footer message' ] as $k => $l ) : ?>
-			<tr><th><?php echo esc_html( $l ); ?></th><td><input class="regular-text" name="<?php echo self::OPT . '[' . $k . ']'; ?>" value="<?php echo esc_attr( self::brand( $k ) ); ?>"></td></tr>
-			<?php endforeach; ?>
-		</table>
-		<p class="description">The primary email is required. Additional emails are optional and receive the same messages. Team emails receive approval/feedback alerts.</p>
-		<?php submit_button(); ?></form></div>
+	static function settings_page() {
+		$c = esc_attr( self::brand( 'brand_color' ) );
+		?>
+		<style>
+		.bs-wrap{max-width:900px;margin:18px 20px 0 0;font-size:14px}
+		.bs-hero{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#111827,<?php echo $c; ?>);color:#fff;border-radius:14px;padding:22px 26px;margin-bottom:18px}
+		.bs-hero h1{color:#fff;margin:0;font-size:24px;line-height:1.2}.bs-hero p{margin:4px 0 0;color:#cbd5e1}
+		.bs-logo{background:#fff;border-radius:10px;padding:6px 10px}.bs-logo img{display:block;max-height:44px;width:auto}
+		.bs-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+		.bs-card h2{margin:0 0 2px;font-size:16px}.bs-d{margin:0 0 14px;color:#6b7280}
+		.bs-l{display:block;font-weight:600;margin-bottom:6px}.bs-req{color:#b91c1c;font-weight:600;font-size:11px;text-transform:uppercase;margin-left:6px}.bs-opt{color:#6b7280;font-weight:500;font-size:11px;text-transform:uppercase;margin-left:6px}
+		.bs-card input[type=text],.bs-card input[type=email],.bs-card input[type=url]{width:100%;max-width:480px;height:40px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;box-sizing:border-box}
+		.bs-card input:focus{border-color:<?php echo $c; ?>;box-shadow:0 0 0 2px <?php echo $c; ?>22;outline:0}
+		.bs-erow{display:flex;gap:6px;max-width:480px;margin-bottom:8px}.bs-erow input{flex:1}
+		.bs-del{border:1px solid #d1d5db;background:#fff;border-radius:8px;width:40px;cursor:pointer;font-size:20px;color:#6b7280}.bs-del:hover{color:#b91c1c;border-color:#b91c1c}
+		.bs-add{background:#f3f4f6;border:1px dashed #9ca3af;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600}.bs-add:hover{background:#e5e7eb}
+		.bs-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.bs-grid .full{grid-column:1/-1}
+		.bs-card input[type=color]{width:56px;height:40px;padding:2px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer;background:#fff}
+		.bs-prev{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;display:inline-block;margin-top:8px}.bs-prev img{display:block;max-height:40px;width:auto}
+		.bs-save{position:sticky;bottom:0;background:linear-gradient(transparent,#f0f0f1 40%);padding:16px 0}
+		.bs-save .button-primary{height:42px;padding:0 26px;border-radius:8px;font-weight:600;background:<?php echo $c; ?>;border-color:<?php echo $c; ?>}
+		@media(max-width:782px){.bs-grid{grid-template-columns:1fr}}
+		</style>
+		<div class="bs-wrap">
+			<div class="bs-hero"><div class="bs-logo"><img src="<?php echo esc_url( self::brand( 'brand_logo' ) ); ?>" alt=""></div><div><h1>Approval Settings</h1><p>Who gets the emails, and how they look.</p></div></div>
+			<?php settings_errors(); ?>
+			<form method="post" action="options.php"><?php settings_fields( 'ban' ); ?>
+				<div class="bs-card"><h2>Client</h2><p class="bs-d">The client name appears in the review email greeting.</p>
+					<label class="bs-l">Client name</label><input type="text" name="<?php echo self::OPT; ?>[client_name]" value="<?php echo esc_attr( self::opt( 'client_name' ) ); ?>"></div>
+				<div class="bs-grid">
+					<?php self::email_fields( 'client', 'Client emails', 'These people receive the "please review your blog" email.' ); ?>
+					<?php self::email_fields( 'team', 'Team emails', 'These people are alerted when the client approves or sends feedback.' ); ?>
+				</div>
+				<div class="bs-card"><h2>Branding</h2><p class="bs-d">Shown in the emails, the review page and this dashboard. Leave blank to use the defaults.</p>
+					<div class="bs-grid">
+						<div><label class="bs-l">Company name</label><input type="text" name="<?php echo self::OPT; ?>[brand_name]" value="<?php echo esc_attr( self::brand( 'brand_name' ) ); ?>"></div>
+						<div><label class="bs-l">Website URL</label><input type="url" name="<?php echo self::OPT; ?>[brand_url]" value="<?php echo esc_attr( self::brand( 'brand_url' ) ); ?>"></div>
+						<div class="full"><label class="bs-l">Logo URL</label><input type="url" name="<?php echo self::OPT; ?>[brand_logo]" value="<?php echo esc_attr( self::brand( 'brand_logo' ) ); ?>" style="max-width:100%"><div class="bs-prev"><img src="<?php echo esc_url( self::brand( 'brand_logo' ) ); ?>" alt="Logo preview"></div></div>
+						<div><label class="bs-l">Brand colour</label><input type="color" name="<?php echo self::OPT; ?>[brand_color]" value="<?php echo $c; ?>"></div>
+						<div class="full"><label class="bs-l">Footer message</label><input type="text" name="<?php echo self::OPT; ?>[brand_footer]" value="<?php echo esc_attr( self::brand( 'brand_footer' ) ); ?>" style="max-width:100%"></div>
+					</div>
+				</div>
+				<div class="bs-save"><?php submit_button( 'Save settings', 'primary', 'submit', false ); ?></div>
+			</form>
+		</div>
 		<script>
-		document.querySelectorAll('.ban-add').forEach(function(b){
-			b.addEventListener('click',function(){
-				var box=b.previousElementSibling,p=document.createElement('p');
-				p.className='ban-row';
-				p.innerHTML='<input type="email" class="regular-text" name="'+box.dataset.name+'"> <button type="button" class="button ban-del">Remove</button>';
-				box.appendChild(p);p.querySelector('input').focus();
-			});
-		});
 		document.addEventListener('click',function(e){
-			if(e.target.classList.contains('ban-del'))e.target.closest('.ban-row').remove();
+			var t=e.target;
+			if(t.classList.contains('bs-add')){var box=t.previousElementSibling,r=document.createElement('div');r.className='bs-erow';r.innerHTML='<input type="email" name="'+box.dataset.name+'"><button type="button" class="bs-del" aria-label="Remove">&times;</button>';box.appendChild(r);r.firstChild.focus();}
+			if(t.classList.contains('bs-del'))t.closest('.bs-erow').remove();
 		});
 		</script>
 	<?php }
