@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FIZZ Blog Approvals
  * Description: Emails the client when a blog is published (immediately or scheduled), lets them approve or request changes with no login, and notifies your team.
- * Version: 1.2.5
+ * Version: 1.2.6
  * Author: FIZZ designs
  * Author URI: https://fizzdesigns.co.uk/
  * Plugin URI: https://fizzdesigns.co.uk/
@@ -282,24 +282,28 @@ class BAN_Plugin {
 					[ $lab, $fg, $bg ] = $meta[ $st ];
 					$sent = (int) get_post_meta( $p->ID, '_ban_sent', true );
 					$fb   = $last['feedback'] ?? '';
+					$short = $fb ? wp_trim_words( wp_strip_all_tags( $fb ), 16 ) : '';
+					$more  = $fb && ( $short !== trim( wp_strip_all_tags( $fb ) ) || preg_match( '/<(ul|ol|blockquote|h2|h3|br|a)\b/i', $fb ) || count( $log ) > 1 );
 					?>
 					<div class="ban-row">
 						<div><a class="ban-title" href="<?php echo esc_url( get_edit_post_link( $p->ID ) ); ?>"><?php echo esc_html( get_the_title( $p ) ); ?></a></div>
 						<div><?php echo esc_html( human_time_diff( $sent ) ); ?> ago<div class="ban-sub"><?php echo esc_html( wp_date( 'j M Y, H:i', $sent ) ); ?></div></div>
 						<div><span class="ban-pill" style="color:<?php echo $fg; ?>;background:<?php echo $bg; ?>"><?php echo $lab; ?></span><?php if ( $last ) echo '<div class="ban-sub">' . esc_html( wp_date( 'j M, H:i', $last['time'] ) ) . '</div>'; ?></div>
-						<div><?php if ( $fb ) :
-							$short = wp_trim_words( wp_strip_all_tags( $fb ), 16 );
-							$more  = $short !== trim( wp_strip_all_tags( $fb ) ) || preg_match( '/<(ul|ol|blockquote|h2|h3|br|a)\b/i', $fb ) || count( $log ) > 1;
+						<div><?php if ( $fb ) {
 							echo esc_html( $short );
-							if ( $more ) { echo ' <a href="#" class="ban-more" data-ban="ban-m-' . (int) $p->ID . '" style="color:' . $c . ';font-weight:600">Read more</a>'; }
-						else : echo '<span class="ban-sub">—</span>'; endif; ?></div>
+							if ( $more ) {
+								echo ' <a href="#" class="ban-more" data-ban="ban-m-' . (int) $p->ID . '" style="color:' . $c . ';font-weight:600">Read more</a>';
+							}
+						} else {
+							echo '<span class="ban-sub">—</span>';
+						} ?></div>
 						<div class="ban-act">
 							<a href="<?php echo esc_url( get_permalink( $p ) ); ?>" target="_blank" rel="noopener">View</a>
 							<a href="<?php echo esc_url( get_edit_post_link( $p->ID ) ); ?>">Edit</a>
 							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_resend&post=' . $p->ID . '&back=ban' ), 'ban_resend' ) ); ?>">Resend</a>
 						</div>
 					</div>
-					<?php if ( $fb ) : ?>
+					<?php if ( $more ) : ?>
 					<dialog class="ban-modal" id="ban-m-<?php echo (int) $p->ID; ?>">
 						<div class="ban-mh"><div><strong><?php echo esc_html( get_the_title( $p ) ); ?></strong><div class="ban-sub"><span class="ban-pill" style="color:<?php echo $fg; ?>;background:<?php echo $bg; ?>"><?php echo $lab; ?></span></div></div><button type="button" class="ban-x" aria-label="Close">&times;</button></div>
 						<div class="ban-mb">
