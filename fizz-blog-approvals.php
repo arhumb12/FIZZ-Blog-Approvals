@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FIZZ Blog Approvals
  * Description: Emails the client when a blog is published (immediately or scheduled), lets them approve or request changes with no login, and notifies your team.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: FIZZ designs
  * Author URI: https://fizzdesigns.co.uk/
  * Plugin URI: https://fizzdesigns.co.uk/
@@ -239,11 +239,14 @@ class BAN_Plugin {
 		$paged  = max( 1, absint( $_GET['paged'] ?? 1 ) );
 		$per    = 15;
 		$posts  = get_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'numberposts' => 300, 'meta_key' => '_ban_sent', 'orderby' => 'meta_value_num', 'order' => 'DESC', 'no_found_rows' => true ] );
-		$rows = []; $count = [ 'all' => 0, 'awaiting' => 0, 'approved' => 0, 'changes' => 0 ];
+		$rows = []; $count = [ 'all' => 0, 'awaiting' => 0, 'approved' => 0, 'changes' => 0, 'revised' => 0 ]; $rev_total = 0;
 		foreach ( $posts as $p ) {
 			$st = get_post_meta( $p->ID, '_ban_status', true ) ?: 'awaiting';
 			$count['all']++; $count[ $st ]++;
-			if ( $filter === 'all' || $filter === $st ) $rows[] = [ $p, $st ];
+			$rv = 0;
+			foreach ( (array) ( get_post_meta( $p->ID, '_ban_log', true ) ?: [] ) as $e ) { if ( ( $e['status'] ?? '' ) === 'revised' ) $rv++; }
+			if ( $rv ) { $count['revised']++; $rev_total += $rv; }
+			if ( $filter === 'all' || $filter === $st || ( $filter === 'revised' && $rv ) ) $rows[] = [ $p, $st ];
 		}
 		$total_rows = count( $rows );
 		$rows = array_slice( $rows, ( $paged - 1 ) * $per, $per );
@@ -263,13 +266,13 @@ class BAN_Plugin {
 		.ban-hero .ban-logo{background:#fff;border-radius:10px;padding:6px 10px;margin-right:16px}.ban-hero .ban-logo img{display:block;max-height:44px;width:auto}
 		.ban-hero .ban-l{display:flex;align-items:center}
 		.ban-btn{background:#fff;color:#111;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:600}.ban-btn:hover{background:#f1f5f9;color:#111}
-		.ban-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:18px 0}
+		.ban-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:18px 0}
 		.ban-card{display:block;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 18px;text-decoration:none;color:#111;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:box-shadow .15s,transform .15s}
 		.ban-card:hover{box-shadow:0 6px 16px rgba(0,0,0,.08);transform:translateY(-1px);color:#111}
 		.ban-card.on{border-color:<?php echo $c; ?>;box-shadow:0 0 0 2px <?php echo $c; ?>22}
 		.ban-card small{display:block;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.04em;font-size:11px}.ban-card b{display:block;font-size:30px;line-height:1.2;margin-top:4px}
 		.ban-panel{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-		.ban-row{display:grid;grid-template-columns:2.2fr 1.2fr 1.1fr 2.6fr 1fr;gap:14px;align-items:start;padding:14px 20px;border-top:1px solid #f1f1f4}
+		.ban-row{display:grid;grid-template-columns:2fr 1.1fr 1.1fr .9fr 2.2fr 1fr;gap:14px;align-items:start;padding:14px 20px;border-top:1px solid #f1f1f4}
 		.ban-row.h{background:#f9fafb;border-top:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 		.ban-row:not(.h):hover{background:#fafbff}
 		.ban-title{font-weight:600;font-size:14px;text-decoration:none}.ban-sub{color:#6b7280;font-size:12px;margin-top:2px}
@@ -298,30 +301,37 @@ class BAN_Plugin {
 			<?php if ( ! self::opt( 'client_email' ) ) echo '<div class="notice notice-warning"><p>No client email set yet. <a href="' . esc_url( admin_url( 'admin.php?page=ban-settings' ) ) . '">Configure settings</a> to start sending review emails.</p></div>'; ?>
 			<div class="ban-stats">
 				<?php
-				$cards = [ 'all' => [ 'Total sent', $count['all'] ], 'awaiting' => [ 'Awaiting', $count['awaiting'] ], 'approved' => [ 'Approved', $count['approved'] ], 'changes' => [ 'Changes requested', $count['changes'] ] ];
+				$cards = [ 'all' => [ 'Total sent', $count['all'] ], 'awaiting' => [ 'Awaiting', $count['awaiting'] ], 'approved' => [ 'Approved', $count['approved'] ], 'changes' => [ 'Changes requested', $count['changes'] ], 'revised' => [ 'Blogs revised', $count['revised'] ] ];
 				foreach ( $cards as $k => $v ) {
 					echo '<a class="ban-card' . ( $filter === $k ? ' on' : '' ) . '" href="' . esc_url( add_query_arg( 'status', $k, $base ) ) . '"><small>' . esc_html( $v[0] ) . '</small><b>' . (int) $v[1] . '</b></a>';
 				}
+				echo '<div class="ban-card"><small>Total revisions</small><b>' . (int) $rev_total . '</b></div>';
 				echo '<div class="ban-card"><small>Approval rate</small><b>' . (int) $rate . '%</b></div>';
 				?>
 			</div>
 			<div class="ban-panel">
-				<div class="ban-row h"><div>Blog</div><div>Emailed</div><div>Status</div><div>Latest feedback</div><div>Actions</div></div>
+				<div class="ban-row h"><div>Blog</div><div>Emailed</div><div>Status</div><div>Revisions</div><div>Latest feedback</div><div>Actions</div></div>
 				<?php if ( ! $rows ) echo '<div class="ban-empty">Nothing here yet. Review emails are sent automatically when a new blog is published.</div>'; ?>
 				<?php foreach ( $rows as [ $p, $st ] ) :
 					$log  = get_post_meta( $p->ID, '_ban_log', true ) ?: [];
 					$last = $log ? end( $log ) : null;
+					$rvs  = array_values( array_filter( $log, function ( $e ) { return $e['status'] === 'revised'; } ) );
+					$rv   = count( $rvs );
 					$fbl  = array_values( array_filter( $log, function ( $e ) { return $e['status'] === 'changes'; } ) );
 					[ $lab, $fg, $bg ] = $meta[ $st ];
 					$sent = (int) get_post_meta( $p->ID, '_ban_sent', true );
 					$fb   = $fbl ? end( $fbl )['feedback'] : '';
 					$short = $fb ? wp_trim_words( wp_strip_all_tags( $fb ), 16 ) : '';
+					$has_modal = $fb || $rv;
 					$more  = $fb && ( $short !== trim( wp_strip_all_tags( $fb ) ) || preg_match( '/<(ul|ol|blockquote|h2|h3|br|a)\b/i', $fb ) || count( $log ) > 1 );
 					?>
 					<div class="ban-row">
 						<div><a class="ban-title" href="<?php echo esc_url( get_edit_post_link( $p->ID ) ); ?>"><?php echo esc_html( get_the_title( $p ) ); ?></a></div>
 						<div><?php echo esc_html( human_time_diff( $sent ) ); ?> ago<div class="ban-sub"><?php echo esc_html( wp_date( 'j M Y, H:i', $sent ) ); ?></div></div>
 						<div><span class="ban-pill" style="color:<?php echo $fg; ?>;background:<?php echo $bg; ?>"><?php echo $lab; ?></span><?php if ( $last ) echo '<div class="ban-sub">' . esc_html( wp_date( 'j M, H:i', $last['time'] ) ) . '</div>'; ?></div>
+						<div><?php if ( $rv ) {
+							echo '<a href="#" class="ban-more" data-ban="ban-m-' . (int) $p->ID . '" style="text-decoration:none"><span class="ban-pill" style="color:#4338ca;background:#e0e7ff">🔁 ' . (int) $rv . ' ' . ( $rv === 1 ? 'revision' : 'revisions' ) . '</span></a><div class="ban-sub">Last sent ' . esc_html( human_time_diff( end( $rvs )['time'] ) ) . ' ago</div>';
+						} else { echo '<span class="ban-sub">—</span>'; } ?></div>
 						<div><?php if ( $fb ) {
 							echo esc_html( $short );
 							if ( $more ) {
@@ -336,11 +346,12 @@ class BAN_Plugin {
 							<?php if ( $st === 'changes' ) : ?><a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_revise&post=' . $p->ID . '&back=ban' ), 'ban_revise' ) ); ?>">Send revision</a><?php else : ?><a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_resend&post=' . $p->ID . '&back=ban' ), 'ban_resend' ) ); ?>">Resend</a><?php endif; ?>
 						</div>
 					</div>
-					<?php if ( $more ) : ?>
+					<?php if ( $has_modal ) : ?>
 					<dialog class="ban-modal" id="ban-m-<?php echo (int) $p->ID; ?>">
 						<div class="ban-mh"><div><strong><?php echo esc_html( get_the_title( $p ) ); ?></strong><div class="ban-sub"><span class="ban-pill" style="color:<?php echo $fg; ?>;background:<?php echo $bg; ?>"><?php echo $lab; ?></span></div></div><button type="button" class="ban-x" aria-label="Close">&times;</button></div>
 						<div class="ban-mb">
-							<?php foreach ( array_reverse( $log ) as $l ) : if ( $l['status'] !== 'changes' ) { echo '<div class="ban-entry"><div class="ban-sub">' . esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ) . '</div><p>' . ( $l['status'] === 'approved' ? '✅ Approved' : '🔁 Revised version sent to client' ) . '</p></div>'; continue; } ?>
+							<div class="ban-sub" style="padding-top:10px"><strong><?php echo (int) $rv; ?></strong> revision(s) sent · <strong><?php echo count( $fbl ); ?></strong> feedback round(s)</div>
+							<?php $rn = $rv; foreach ( array_reverse( $log ) as $l ) : if ( $l['status'] !== 'changes' ) { echo '<div class="ban-entry"><div class="ban-sub">' . esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ) . '</div><p>' . ( $l['status'] === 'approved' ? '✅ Approved' : '🔁 Revision #' . ( $rn-- ) . ' sent to client' ) . '</p></div>'; continue; } ?>
 								<div class="ban-entry"><div class="ban-sub"><?php echo esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ); ?> · Changes requested</div><div class="full"><?php echo self::fb_html( $l['feedback'] ); ?></div></div>
 							<?php endforeach; ?>
 						</div>
