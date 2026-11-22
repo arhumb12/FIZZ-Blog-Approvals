@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FIZZ Blog Approvals
  * Description: Emails the client when a blog is published (immediately or scheduled), lets them approve or request changes with no login, and notifies your team.
- * Version: 1.2.6
+ * Version: 1.3.0
  * Author: FIZZ designs
  * Author URI: https://fizzdesigns.co.uk/
  * Plugin URI: https://fizzdesigns.co.uk/
@@ -29,6 +29,7 @@ class BAN_Plugin {
 		add_filter( 'manage_posts_columns', [ __CLASS__, 'col' ] );
 		add_action( 'manage_posts_custom_column', [ __CLASS__, 'col_val' ], 10, 2 );
 		add_action( 'admin_post_ban_resend', [ __CLASS__, 'resend' ] );
+		add_action( 'admin_post_ban_revise', [ __CLASS__, 'revise' ] );
 	}
 
 	static function opt( $k, $d = '' ) {
@@ -48,7 +49,24 @@ class BAN_Plugin {
 		return self::opt( $k, $def[ $k ] );
 	}
 
-	static function brand_header() {
+	// The client's own website logo (custom logo, then site icon), or an override from Settings.
+	static function client_logo() {
+		$url = self::opt( 'client_logo' );
+		if ( ! $url ) {
+			$id = (int) get_theme_mod( 'custom_logo' );
+			if ( $id ) $url = wp_get_attachment_image_url( $id, 'full' );
+		}
+		if ( ! $url ) $url = get_site_icon_url( 256 );
+		return $url ?: '';
+	}
+
+	static function brand_header( $client_facing = false ) {
+		if ( $client_facing ) {
+			$logo = self::client_logo();
+			$name = get_bloginfo( 'name' );
+			$inner = $logo ? '<img src="' . esc_url( $logo ) . '" alt="' . esc_attr( $name ) . '" style="max-height:60px;width:auto;border:0">' : '<span style="font-size:20px;font-weight:bold;color:#222">' . esc_html( $name ) . '</span>';
+			return '<div style="padding:14px 0;border-bottom:3px solid ' . esc_attr( self::brand( 'brand_color' ) ) . ';margin-bottom:20px"><a href="' . esc_url( home_url( '/' ) ) . '" style="text-decoration:none">' . $inner . '</a></div>';
+		}
 		return '<div style="padding:14px 0;border-bottom:3px solid ' . esc_attr( self::brand( 'brand_color' ) ) . ';margin-bottom:20px"><a href="' . esc_url( self::brand( 'brand_url' ) ) . '"><img src="' . esc_url( self::brand( 'brand_logo' ) ) . '" alt="' . esc_attr( self::brand( 'brand_name' ) ) . '" style="max-height:60px;width:auto;border:0"></a></div>';
 	}
 
@@ -91,8 +109,8 @@ class BAN_Plugin {
 		return $t === wp_strip_all_tags( $t ) ? nl2br( esc_html( $t ) ) : wp_kses_post( $t );
 	}
 
-	static function wrap( $body ) {
-		return '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#222;line-height:1.5">' . self::brand_header() . $body . self::brand_footer() . '</div>';
+	static function wrap( $body, $client_facing = false ) {
+		return '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#222;line-height:1.5">' . self::brand_header( $client_facing ) . $body . self::brand_footer() . '</div>';
 	}
 
 	static function btn( $url, $label, $color ) {
@@ -110,7 +128,21 @@ class BAN_Plugin {
 		. '<p>Please take a moment to review it:</p>'
 		. '<p>' . self::btn( $rev . '#approve', '✅ Looks great!', '#2e9e4f' ) . self::btn( $rev . '#feedback', '✏️ Request changes', '#d9822b' ) . '</p>'
 		. '<p style="color:#777;font-size:13px">No login needed. Your response goes straight to our team.</p>';
-		self::send( self::recipients( 'client' ), 'Your new blog is live – please review: ' . get_the_title( $post ), self::wrap( $body ) );
+		self::send( self::recipients( 'client' ), 'Your new blog is live – please review: ' . get_the_title( $post ), self::wrap( $body, true ) );
+	}
+
+	// Sent by the team after making the requested changes.
+	static function send_revision( $post ) {
+		$name = self::opt( 'client_name', 'there' );
+		$rev  = self::review_url( $post->ID );
+		$body = '<p>Hi ' . esc_html( $name ) . ',</p>'
+		. '<p>Thank you for your feedback. We have made the changes you requested to:</p>'
+		. '<p style="font-size:18px"><strong>' . esc_html( get_the_title( $post ) ) . '</strong></p>'
+		. '<p>' . self::btn( get_permalink( $post ), 'View the updated blog', '#444' ) . '</p>'
+		. '<p>Please take another look:</p>'
+		. '<p>' . self::btn( $rev . '#approve', '✅ Looks great!', '#2e9e4f' ) . self::btn( $rev . '#feedback', '✏️ Request more changes', '#d9822b' ) . '</p>'
+		. '<p style="color:#777;font-size:13px">No login needed. Your response goes straight to our team.</p>';
+		self::send( self::recipients( 'client' ), 'Updated blog ready for your review: ' . get_the_title( $post ), self::wrap( $body, true ) );
 	}
 
 	static function send_team_email( $post, $status, $feedback ) {
@@ -191,7 +223,7 @@ class BAN_Plugin {
 		status_header( 200 );
 		echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' . esc_html( $title ) . '</title></head>'
 		. '<body style="font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:24px"><div style="max-width:600px;margin:auto;background:#fff;padding:28px;border-radius:10px;line-height:1.5">'
-		. self::brand_header() . '<h1 style="font-size:22px;margin-top:0">' . esc_html( $title ) . '</h1>' . $html . self::brand_footer() . '</div></body></html>';
+		. self::brand_header( true ) . '<h1 style="font-size:22px;margin-top:0">' . esc_html( $title ) . '</h1>' . $html . self::brand_footer() . '</div></body></html>';
 		exit;
 	}
 
@@ -262,7 +294,7 @@ class BAN_Plugin {
 					<div><h1>Client Approvals</h1><p>Track client reviews of your published blogs in one place.</p></div></div>
 				<?php if ( current_user_can( 'manage_options' ) ) : ?><a class="ban-btn" href="<?php echo esc_url( admin_url( 'admin.php?page=ban-settings' ) ); ?>">⚙ Settings</a><?php endif; ?>
 			</div>
-			<?php if ( isset( $_GET['resent'] ) ) echo '<div class="notice notice-success is-dismissible"><p>Client email resent.</p></div>'; ?>
+			<?php if ( isset( $_GET['resent'] ) ) echo '<div class="notice notice-success is-dismissible"><p>Client email resent.</p></div>'; if ( isset( $_GET['revised'] ) ) echo '<div class="notice notice-success is-dismissible"><p>Revised version sent to the client for review.</p></div>'; ?>
 			<?php if ( ! self::opt( 'client_email' ) ) echo '<div class="notice notice-warning"><p>No client email set yet. <a href="' . esc_url( admin_url( 'admin.php?page=ban-settings' ) ) . '">Configure settings</a> to start sending review emails.</p></div>'; ?>
 			<div class="ban-stats">
 				<?php
@@ -279,9 +311,10 @@ class BAN_Plugin {
 				<?php foreach ( $rows as [ $p, $st ] ) :
 					$log  = get_post_meta( $p->ID, '_ban_log', true ) ?: [];
 					$last = $log ? end( $log ) : null;
+					$fbl  = array_values( array_filter( $log, function ( $e ) { return $e['status'] === 'changes'; } ) );
 					[ $lab, $fg, $bg ] = $meta[ $st ];
 					$sent = (int) get_post_meta( $p->ID, '_ban_sent', true );
-					$fb   = $last['feedback'] ?? '';
+					$fb   = $fbl ? end( $fbl )['feedback'] : '';
 					$short = $fb ? wp_trim_words( wp_strip_all_tags( $fb ), 16 ) : '';
 					$more  = $fb && ( $short !== trim( wp_strip_all_tags( $fb ) ) || preg_match( '/<(ul|ol|blockquote|h2|h3|br|a)\b/i', $fb ) || count( $log ) > 1 );
 					?>
@@ -300,14 +333,14 @@ class BAN_Plugin {
 						<div class="ban-act">
 							<a href="<?php echo esc_url( get_permalink( $p ) ); ?>" target="_blank" rel="noopener">View</a>
 							<a href="<?php echo esc_url( get_edit_post_link( $p->ID ) ); ?>">Edit</a>
-							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_resend&post=' . $p->ID . '&back=ban' ), 'ban_resend' ) ); ?>">Resend</a>
+							<?php if ( $st === 'changes' ) : ?><a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_revise&post=' . $p->ID . '&back=ban' ), 'ban_revise' ) ); ?>">Send revision</a><?php else : ?><a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_resend&post=' . $p->ID . '&back=ban' ), 'ban_resend' ) ); ?>">Resend</a><?php endif; ?>
 						</div>
 					</div>
 					<?php if ( $more ) : ?>
 					<dialog class="ban-modal" id="ban-m-<?php echo (int) $p->ID; ?>">
 						<div class="ban-mh"><div><strong><?php echo esc_html( get_the_title( $p ) ); ?></strong><div class="ban-sub"><span class="ban-pill" style="color:<?php echo $fg; ?>;background:<?php echo $bg; ?>"><?php echo $lab; ?></span></div></div><button type="button" class="ban-x" aria-label="Close">&times;</button></div>
 						<div class="ban-mb">
-							<?php foreach ( array_reverse( $log ) as $l ) : if ( $l['status'] !== 'changes' ) { echo '<div class="ban-entry"><div class="ban-sub">' . esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ) . '</div><p>✅ Approved</p></div>'; continue; } ?>
+							<?php foreach ( array_reverse( $log ) as $l ) : if ( $l['status'] !== 'changes' ) { echo '<div class="ban-entry"><div class="ban-sub">' . esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ) . '</div><p>' . ( $l['status'] === 'approved' ? '✅ Approved' : '🔁 Revised version sent to client' ) . '</p></div>'; continue; } ?>
 								<div class="ban-entry"><div class="ban-sub"><?php echo esc_html( wp_date( 'j M Y, H:i', $l['time'] ) ); ?> · Changes requested</div><div class="full"><?php echo self::fb_html( $l['feedback'] ); ?></div></div>
 							<?php endforeach; ?>
 						</div>
@@ -334,6 +367,7 @@ class BAN_Plugin {
 			$old = get_option( self::OPT, [] );
 			$out = [
 				'client_name'  => sanitize_text_field( $in['client_name'] ?? '' ),
+				'client_logo'  => esc_url_raw( $in['client_logo'] ?? '' ),
 				'brand_name'   => sanitize_text_field( $in['brand_name'] ?? '' ),
 				'brand_logo'   => esc_url_raw( $in['brand_logo'] ?? '' ),
 				'brand_color'  => sanitize_hex_color( $in['brand_color'] ?? '' ) ?: '',
@@ -405,7 +439,9 @@ class BAN_Plugin {
 			<?php settings_errors(); ?>
 			<form method="post" action="options.php"><?php settings_fields( 'ban' ); ?>
 				<div class="bs-card"><h2>Client</h2><p class="bs-d">The client name appears in the review email greeting.</p>
-					<label class="bs-l">Client name</label><input type="text" name="<?php echo self::OPT; ?>[client_name]" value="<?php echo esc_attr( self::opt( 'client_name' ) ); ?>"></div>
+					<label class="bs-l">Client name</label><input type="text" name="<?php echo self::OPT; ?>[client_name]" value="<?php echo esc_attr( self::opt( 'client_name' ) ); ?>">
+					<label class="bs-l" style="margin-top:14px">Client logo URL <span class="bs-opt">optional</span></label><input type="url" name="<?php echo self::OPT; ?>[client_logo]" value="<?php echo esc_attr( self::opt( 'client_logo' ) ); ?>" style="max-width:100%" placeholder="Leave blank to use this website's own logo automatically">
+					<?php $cl = self::client_logo(); if ( $cl ) echo '<div class="bs-prev"><img src="' . esc_url( $cl ) . '" alt="Client logo preview"></div>'; ?></div>
 				<div class="bs-grid">
 					<?php self::email_fields( 'client', 'Client emails', 'These people receive the "please review your blog" email.' ); ?>
 					<?php self::email_fields( 'team', 'Team emails', 'These people are alerted when the client approves or sends feedback.' ); ?>
@@ -437,11 +473,14 @@ class BAN_Plugin {
 			$log  = get_post_meta( $post->ID, '_ban_log', true ) ?: [];
 			echo '<p>' . ( $sent ? 'Client emailed ' . esc_html( wp_date( 'j M Y H:i', $sent ) ) : 'Not sent yet (sends on publish).' ) . '</p>';
 			foreach ( array_reverse( $log ) as $l ) {
-				echo '<p><strong>' . ( $l['status'] === 'approved' ? '✅ Approved' : '✏️ Changes' ) . '</strong> – ' . esc_html( wp_date( 'j M H:i', $l['time'] ) )
+				echo '<p><strong>' . ( $l['status'] === 'approved' ? '✅ Approved' : ( $l['status'] === 'revised' ? '🔁 Revision sent' : '✏️ Changes' ) ) . '</strong> – ' . esc_html( wp_date( 'j M H:i', $l['time'] ) )
 				. ( $l['feedback'] ? '<br>' . self::fb_html( $l['feedback'] ) : '' ) . '</p>';
 			}
 			if ( $post->post_status === 'publish' ) {
-				echo '<a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_resend&post=' . $post->ID ), 'ban_resend' ) ) . '">Resend client email</a>';
+				if ( get_post_meta( $post->ID, '_ban_status', true ) === 'changes' ) {
+					echo '<a class="button button-primary" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_revise&post=' . $post->ID ), 'ban_revise' ) ) . '">Send revised version to client</a> ';
+				}
+				echo '<a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ban_resend&post=' . $post->ID ), 'ban_resend' ) ) . '">Resend original email</a>';
 			}
 		}, 'post', 'side' );
 	}
@@ -454,6 +493,19 @@ class BAN_Plugin {
 			self::send_client_email( $post );
 		}
 		wp_safe_redirect( isset( $_GET['back'] ) ? admin_url( 'admin.php?page=ban-reviews&resent=1' ) : get_edit_post_link( $post->ID, 'raw' ) ); exit;
+	}
+
+	static function revise() {
+		check_admin_referer( 'ban_revise' );
+		$post = get_post( absint( $_GET['post'] ?? 0 ) );
+		if ( $post && current_user_can( 'edit_post', $post->ID ) ) {
+			$log   = get_post_meta( $post->ID, '_ban_log', true ) ?: [];
+			$log[] = [ 'time' => time(), 'status' => 'revised', 'feedback' => '' ];
+			update_post_meta( $post->ID, '_ban_log', $log );
+			update_post_meta( $post->ID, '_ban_status', 'awaiting' );
+			self::send_revision( $post );
+		}
+		wp_safe_redirect( isset( $_GET['back'] ) ? admin_url( 'admin.php?page=ban-reviews&revised=1' ) : get_edit_post_link( $post->ID, 'raw' ) ); exit;
 	}
 
 	static function col( $c ) { $c['ban'] = 'Client review'; return $c; }
